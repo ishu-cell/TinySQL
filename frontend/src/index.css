@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   TinySQL — Global Styles & Design Tokens
+   ============================================================ */
+
+:root {
+  --bg-deep:    #0a0a0f;
+  --bg-card:    #12121a;
+  --bg-panel:   #1a1a2e;
+  --matrix:     #00ff88;
+  --cyan-acc:   #00d4ff;
+  --err:        #ff6b6b;
+  --warn:       #ffb347;
+  --border-g:   #1e1e3a;
+  --text-dim:   #6b6b8a;
+  --text-mid:   #9e9eba;
+  --text-light: #e0e0f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-deep);
+  color: var(--text-light);
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-g);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2e2e4a;
+}
+
+/* Glass panel base */
+.glass-panel {
+  background: rgba(18, 18, 26, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-g);
+  border-radius: 12px;
+}
+
+/* Terminal output area */
+.terminal-output {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-g) var(--bg-deep);
+}
+
+/* Glow input focus */
+input:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.2), 0 0 20px rgba(0, 255, 136, 0.05);
+}
+
+/* CRT scanline overlay */
+.scanline-overlay {
+  position: relative;
+  overflow: hidden;
+}
+.scanline-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 136, 0.015) 2px,
+    rgba(0, 255, 136, 0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Table row hover glow */
+.row-glow:hover {
+  background: rgba(0, 255, 136, 0.04) !important;
+  box-shadow: inset 0 0 30px rgba(0, 255, 136, 0.02);
+}
+
+/* Pulsing dot animation */
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
+}
+.dot-pulse span:nth-child(1) { animation: dot-pulse 1.4s infinite 0s; }
+.dot-pulse span:nth-child(2) { animation: dot-pulse 1.4s infinite 0.2s; }
+.dot-pulse span:nth-child(3) { animation: dot-pulse 1.4s infinite 0.4s; }
+
+/* Tab active indicator */
+.tab-active {
+  position: relative;
+}
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--matrix), transparent);
+}
+
+/* Subtle gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--matrix), var(--cyan-acc));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Button base */
+.btn-primary {
+  background: linear-gradient(135deg, rgba(0,255,136,0.15), rgba(0,212,255,0.1));
+  border: 1px solid rgba(0,255,136,0.3);
+  color: var(--matrix);
+  transition: all 0.2s ease;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, rgba(0,255,136,0.25), rgba(0,212,255,0.15));
+  border-color: rgba(0,255,136,0.5);
+  box-shadow: 0 0 20px rgba(0,255,136,0.1);
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}

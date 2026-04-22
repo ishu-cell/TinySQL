@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TinySQL — High-Performance Database Dashboard</title>
+  <meta name="description" content="TinySQL: A disk-persistent database engine with B+ Tree indexing, heap file storage, LRU buffer pool, and real-time performance benchmarking." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================================================
+       Design Tokens
+       ============================================================ */
+    :root {
+      --bg-deep:     #06060c;
+      --bg-card:     #0d0d18;
+      --bg-panel:    #13132a;
+      --bg-elevated: #1a1a3a;
+      --matrix:      #00ff88;
+      --matrix-dim:  #00cc6a;
+      --cyan:        #00d4ff;
+      --purple:      #a855f7;
+      --amber:       #f59e0b;
+      --rose:        #fb7185;
+      --err:         #ff4757;
+      --border:      #1e1e3e;
+      --border-lit:  #2a2a50;
+      --text-dim:    #4a4a6a;
+      --text-mid:    #8a8aaa;
+      --text-light:  #d0d0e8;
+      --text-bright: #f0f0ff;
+      --glow-green:  rgba(0, 255, 136, 0.15);
+      --glow-cyan:   rgba(0, 212, 255, 0.12);
+      --radius:      12px;
+      --radius-sm:   8px;
+    }
+
+    /* ============================================================
+       Reset & Base
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-deep);
+      color: var(--text-light);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ============================================================
+       Scrollbar
+       ============================================================ */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-deep); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-lit); }
+
+    /* ============================================================
+       Animations
+       ============================================================ */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 8px var(--glow-green); } 50% { box-shadow: 0 0 20px var(--glow-green), 0 0 40px rgba(0,255,136,0.05); } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes bar-grow { from { width: 0; } }
+    @keyframes count-up { from { opacity: 0.3; } to { opacity: 1; } }
+
+    .animate-in { animation: fadeIn 0.4s ease-out both; }
+    .delay-1 { animation-delay: 0.08s; }
+    .delay-2 { animation-delay: 0.16s; }
+    .delay-3 { animation-delay: 0.24s; }
+    .delay-4 { animation-delay: 0.32s; }
+
+    /* ============================================================
+       Layout
+       ============================================================ */
+    .app-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px 40px;
+    }
+
+    /* ============================================================
+       Header
+       ============================================================ */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--matrix), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .logo-icon { font-size: 28px; filter: drop-shadow(0 0 8px rgba(0,255,136,0.4)); }
+    .subtitle {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+    .conn-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--matrix);
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+    .conn-dot.offline { background: var(--err); animation: none; }
+
+    /* ============================================================
+       Cards
+       ============================================================ */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .card:hover {
+      border-color: var(--border-lit);
+      box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(19, 19, 42, 0.5);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-light);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title .icon { color: var(--matrix); font-size: 16px; }
+    .card-body { padding: 20px; }
+
+    /* ============================================================
+       Grid Layout
+       ============================================================ */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .grid-4 { grid-template-columns: 1fr; }
+    }
+    .section-gap { margin-bottom: 24px; }
+
+    /* ============================================================
+       Stat Cards
+       ============================================================ */
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+      border-color: var(--border-lit);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-bright);
+      animation: count-up 0.5s ease-out;
+    }
+    .stat-value.green { color: var(--matrix); }
+    .stat-value.cyan { color: var(--cyan); }
+    .stat-value.purple { color: var(--purple); }
+    .stat-value.amber { color: var(--amber); }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ============================================================
+       Buttons
+       ============================================================ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      font-family: inherit;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,212,255,0.08));
+      border-color: rgba(0,255,136,0.3);
+      color: var(--matrix);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, rgba(0,255,136,0.22), rgba(0,212,255,0.14));
+      border-color: rgba(0,255,136,0.6);
+      box-shadow: 0 0 24px rgba(0,255,136,0.12);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: var(--bg-panel);
+      border-color: var(--border);
+      color: var(--text-mid);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      transform: translateY(-1px);
+    }
+    .btn-danger {
+      background: rgba(255,71,87,0.08);
+      border-color: rgba(255,71,87,0.3);
+      color: var(--rose);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(255,71,87,0.15);
+      border-color: rgba(255,71,87,0.5);
+    }
+
+    /* ============================================================
+       Inputs
+       ============================================================ */
+    .input {
+      background: var(--bg-deep);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      font-size: 14px;
+      color: var(--text-bright);
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.25s ease;
+      width: 100%;
+    }
+    .input:focus {
+      outline: none;
+      border-color: rgba(0,255,136,0.4);
+      box-shadow: 0 0 0 3px rgba(0,255,136,0.08), 0 0 20px rgba(0,255,136,0.04);
+    }
+    .input::placeholder { color: var(--text-dim); }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .input-group .input { flex: 1; }
+
+    /* ============================================================
+       Spinner
+       ============================================================ */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--matrix);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    /* ============================================================
+       Performance Bars
+       ============================================================ */
+    .perf-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .perf-label {
+      width: 70px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: right;
+      flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .perf-bar-container {
+      flex: 1;
+      height: 32px;
+      background: var(--bg-deep);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+    .perf-bar {
+      height: 100%;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--bg-deep);
+      min-width: 60px;
+      animation: bar-grow 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+      transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .perf-bar.btree {
+      background: linear-gradient(90deg, var(--matrix-dim), var(--matrix));
+      box-shadow: 0 0 12px rgba(0,255,136,0.3);
+    }
+    .perf-bar.heap {
+      background: linear-gradient(90deg, #c084fc, var(--purple));
+      box-shadow: 0 0 12px rgba(168,85,247,0.3);
+    }
+    .perf-time {
+      width: 100px;
+      text-align: right;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-mid);
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       Result Card
+       ============================================================ */
+    .result-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px 20px;
+      animation: fadeIn 0.3s ease-out;
+    }
+    .result-card.success { border-left: 3px solid var(--matrix); }
+    .result-card.error { border-left: 3px solid var(--err); }
+    .result-field {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(30,30,62,0.6);
+    }
+    .result-field:last-child { border-bottom: none; }
+    .result-key {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+    }
+    .result-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    /* ============================================================
+       Benchmark Table
+       ============================================================ */
+    .bench-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .bench-table th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+    }
+    .bench-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(30,30,62,0.4);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .bench-table tr:hover td { background: rgba(0,255,136,0.02); }
+    .bench-winner { color: var(--matrix); font-weight: 600; }
+    .bench-loser { color: var(--text-dim); }
+
+    /* ============================================================
+       Section title
+       ============================================================ */
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      font-weight: 600;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ============================================================
+       Alert / Status bar
+       ============================================================ */
+    .alert {
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      animation: fadeIn 0.3s ease-out;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .alert-success {
+      background: rgba(0,255,136,0.06);
+      border: 1px solid rgba(0,255,136,0.2);
+      color: var(--matrix);
+    }
+    .alert-error {
+      background: rgba(255,71,87,0.06);
+      border: 1px solid rgba(255,71,87,0.2);
+      color: var(--err);
+    }
+    .alert-info {
+      background: rgba(0,212,255,0.06);
+      border: 1px solid rgba(0,212,255,0.2);
+      color: var(--cyan);
+    }
+
+    /* Progress shimmer */
+    .shimmer-bg {
+      background: linear-gradient(90deg, var(--bg-panel) 0%, var(--bg-elevated) 50%, var(--bg-panel) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    /* Divider */
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* Speedup badge */
+    .speedup-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(0,255,136,0.1);
+      color: var(--matrix);
+      border: 1px solid rgba(0,255,136,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container" id="app">
+    <!-- ── Header ── -->
+    <header class="header animate-in">
+      <div class="header-left">
+        <span class="logo-icon">⚡</span>
+        <div>
+          <div class="logo">TinySQL</div>
+          <div class="subtitle">Disk-Persistent Database Engine</div>
+        </div>
+      </div>
+      <div class="conn-badge" id="conn-badge">
+        <span class="conn-dot" id="conn-dot"></span>
+        <span id="conn-text">Connecting…</span>
+      </div>
+    </header>
+
+    <!-- ── Stats Row ── -->
+    <div class="grid-4 section-gap animate-in delay-1" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">B+ Tree Rows</div>
+        <div class="stat-value green" id="stat-btree-rows">—</div>
+        <div class="stat-sub" id="stat-btree-size">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Heap File Rows</div>
+        <div class="stat-value purple" id="stat-heap-rows">—</div>
+        <div class="stat-sub" id="stat-heap-size">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">B+ Tree Pages</div>
+        <div class="stat-value cyan" id="stat-btree-pages">—</div>
+        <div class="stat-sub">4KB per page</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Buffer Pool</div>
+        <div class="stat-value amber" id="stat-buffer">—</div>
+        <div class="stat-sub">of 1024 frames</div>
+      </div>
+    </div>
+
+    <!-- ── Seed + Search ── -->
+    <div class="grid-2 section-gap">
+      <!-- Seed Panel -->
+      <div class="card animate-in delay-2" id="seed-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">🌱</span> Seed Database</div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:13px; color:var(--text-mid); margin-bottom:16px;">
+            Bulk-insert synthetic rows into both B+ Tree and Heap file structures.
+          </p>
+          <div class="input-group" style="margin-bottom:14px;">
+            <input type="number" class="input" id="seed-count" value="10000" min="1" max="2000000" placeholder="Number of rows…" />
+            <button class="btn btn-primary" id="seed-btn" onclick="doSeed()">
+              <span id="seed-btn-text">⚡ Seed</span>
+            </button>
+          </div>
+          <div id="seed-result"></div>
+        </div>
+      </div>
+
+      <!-- Search Panel -->
+      <div class="card animate-in delay-3" id="search-card">
+        <div class="card-header">
+          <div class="card-title"><span class="icon">🔍</span> Search by ID</div>
+          <span style="font-size:11px; color:var(--text-dim);">B+ Tree O(log n) vs Heap O(n)</span>
+        </div>
+        <div class="card-body">
+          <p style="font-size:13px; color:var(--text-mid); margin-bottom:16px;">
+            Search both structures simultaneously and compare execution time.
+          </p>
+          <div class="input-group" style="margin-bottom:14px;">
+            <input type="number" class="input" id="search-id" min="0" placeholder="Enter row ID…" />
+            <button class="btn btn-primary" id="search-btn" onclick="doSearch()">
+              🔎 Find
+            </button>
+          </div>
+          <div id="search-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Performance Visualizer ── -->
+    <div class="card section-gap animate-in delay-3" id="perf-card" style="display:none;">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">📊</span> Performance Comparison</div>
+        <div id="perf-speedup"></div>
+      </div>
+      <div class="card-body" id="perf-body"></div>
+    </div>
+
+    <!-- ── Benchmark ── -->
+    <div class="card section-gap animate-in delay-4" id="bench-card">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">🏁</span> Benchmark Suite</div>
+        <button class="btn btn-secondary" id="bench-btn" onclick="doBenchmark()">
+          <span id="bench-btn-text">▶ Run Benchmark</span>
+        </button>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px; color:var(--text-mid); margin-bottom:16px;">
+          Runs 100 random insert, find, and delete operations comparing B+ Tree vs Heap performance.
+        </p>
+        <div id="bench-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer style="text-align:center; padding:20px; font-size:11px; color:var(--text-dim); border-top:1px solid var(--border);">
+    TinySQL v2.0 — B+ Tree (13 keys/leaf · 510 keys/internal) · Heap File (14 rows/page) · LRU Buffer Pool (1024 frames) · 4KB Pages
+  </footer>
+
+  <script>
+    // ============================================================
+    //  Config
+    // ============================================================
+    const API = window.location.origin;
+
+    // ============================================================
+    //  Helpers
+    // ============================================================
+    function $(id) { return document.getElementById(id); }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatNum(n) {
+      return Number(n).toLocaleString();
+    }
+
+    function formatUs(us) {
+      if (us < 1000) return us.toFixed(1) + ' μs';
+      if (us < 1000000) return (us / 1000).toFixed(2) + ' ms';
+      return (us / 1000000).toFixed(2) + ' s';
+    }
+
+    async function api(endpoint, options = {}) {
+      try {
+        const res = await fetch(API + endpoint, options);
+        return await res.json();
+      } catch (e) {
+        return { status: 'error', message: e.message };
+      }
+    }
+
+    // ============================================================
+    //  Connection Check
+    // ============================================================
+    async function checkHealth() {
+      const data = await api('/api/health');
+      const dot = $('conn-dot');
+      const text = $('conn-text');
+      if (data.status === 'ok') {
+        dot.className = 'conn-dot';
+        text.textContent = 'Engine Online';
+        text.style.color = 'var(--matrix)';
+      } else {
+        dot.className = 'conn-dot offline';
+        text.textContent = 'Disconnected';
+        text.style.color = 'var(--err)';
+      }
+    }
+
+    // ============================================================
+    //  Stats
+    // ============================================================
+    async function refreshStats() {
+      const data = await api('/api/stats');
+      if (data.btree_rows !== undefined) {
+        $('stat-btree-rows').textContent = formatNum(data.btree_rows);
+        $('stat-heap-rows').textContent = formatNum(data.heap_rows);
+        $('stat-btree-pages').textContent = formatNum(data.btree_pages);
+        $('stat-buffer').textContent = formatNum(data.buffer_pool);
+        $('stat-btree-size').textContent = 'data.db: ' + formatBytes(data.btree_file_size);
+        $('stat-heap-size').textContent = 'heap.db: ' + formatBytes(data.heap_file_size);
+      }
+    }
+
+    // ============================================================
+    //  Seed
+    // ============================================================
+    async function doSeed() {
+      const count = parseInt($('seed-count').value) || 10000;
+      const btn = $('seed-btn');
+      const btnText = $('seed-btn-text');
+
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="spinner"></span> Seeding…';
+      $('seed-result').innerHTML = '<div class="alert alert-info"><span class="spinner"></span> Inserting ' + formatNum(count) + ' rows into both structures…</div>';
+
+      const data = await api('/api/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count })
+      });
+
+      btn.disabled = false;
+      btnText.textContent = '⚡ Seed';
+
+      if (data.status === 'success') {
+        $('seed-result').innerHTML = `
+          <div class="alert alert-success">
+            ✓ Seeded successfully in <strong>${(data.elapsed_ms / 1000).toFixed(2)}s</strong>
+          </div>
+          <div style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+            <div class="result-card" style="padding:12px; text-align:center;">
+              <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">B+ TREE</div>
+              <div style="font-size:18px; font-weight:700; color:var(--matrix); font-family:'JetBrains Mono',monospace;">${formatNum(data.inserted_btree)}</div>
+            </div>
+            <div class="result-card" style="padding:12px; text-align:center;">
+              <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">HEAP</div>
+              <div style="font-size:18px; font-weight:700; color:var(--purple); font-family:'JetBrains Mono',monospace;">${formatNum(data.inserted_heap)}</div>
+            </div>
+            <div class="result-card" style="padding:12px; text-align:center;">
+              <div style="font-size:11px; color:var(--text-dim); margin-bottom:4px;">THROUGHPUT</div>
+              <div style="font-size:18px; font-weight:700; color:var(--cyan); font-family:'JetBrains Mono',monospace;">${formatNum(Math.round(data.rows_per_sec))}/s</div>
+            </div>
+          </div>
+        `;
+        refreshStats();
+      } else {
+        $('seed-result').innerHTML = `<div class="alert alert-error">✗ ${data.message || 'Seed failed'}</div>`;
+      }
+    }
+
+    // ============================================================
+    //  Search
+    // ============================================================
+    async function doSearch() {
+      const id = parseInt($('search-id').value);
+      if (isNaN(id) || id < 0) {
+        $('search-result').innerHTML = '<div class="alert alert-error">✗ Enter a valid ID</div>';
+        return;
+      }
+
+      const btn = $('search-btn');
+      btn.disabled = true;
+      $('search-result').innerHTML = '<div class="alert alert-info"><span class="spinner"></span> Searching…</div>';
+
+      const data = await api('/api/search?id=' + id);
+      btn.disabled = false;
+
+      if (data.status === 'success') {
+        let rowHtml = '';
+        if (data.btree.found) {
+          const r = data.btree.row;
+          rowHtml = `
+            <div class="result-card success" style="margin-bottom:12px;">
+              <div style="font-size:11px; color:var(--matrix); font-weight:600; margin-bottom:10px;">✓ Row Found</div>
+              <div class="result-field">
+                <span class="result-key">ID</span>
+                <span class="result-val" style="color:var(--matrix);">${r.id}</span>
+              </div>
+              <div class="result-field">
+                <span class="result-key">Username</span>
+                <span class="result-val" style="color:var(--cyan);">${r.username}</span>
+              </div>
+              <div class="result-field">
+                <span class="result-key">Email</span>
+                <span class="result-val" style="color:var(--text-mid);">${r.email}</span>
+              </div>
+            </div>
+          `;
+        } else {
+          rowHtml = '<div class="result-card error" style="margin-bottom:12px;"><span style="color:var(--err);">✗ Key ' + id + ' not found</span></div>';
+        }
+        $('search-result').innerHTML = rowHtml;
+
+        // Show performance comparison
+        showPerfComparison('Search ID=' + id, data.btree.time_us, data.heap.time_us, data.speedup);
+      } else {
+        $('search-result').innerHTML = `<div class="alert alert-error">✗ ${data.message}</div>`;
+      }
+    }
+
+    // ============================================================
+    //  Performance Visualizer
+    // ============================================================
+    function showPerfComparison(label, btreeUs, heapUs, speedup) {
+      const card = $('perf-card');
+      card.style.display = 'block';
+
+      const maxVal = Math.max(btreeUs, heapUs);
+      const btreeW = maxVal > 0 ? Math.max((btreeUs / maxVal) * 100, 5) : 5;
+      const heapW = maxVal > 0 ? Math.max((heapUs / maxVal) * 100, 5) : 5;
+
+      $('perf-speedup').innerHTML = speedup > 1
+        ? `<span class="speedup-badge">⚡ B+ Tree ${speedup.toFixed(1)}x faster</span>`
+        : `<span class="speedup-badge" style="color:var(--purple);border-color:rgba(168,85,247,0.3);background:rgba(168,85,247,0.1);">Heap ${(1/speedup).toFixed(1)}x faster</span>`;
+
+      $('perf-body').innerHTML = `
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:16px; font-weight:500;">${label}</div>
+        <div class="perf-row">
+          <div class="perf-label" style="color:var(--matrix);">B+ Tree</div>
+          <div class="perf-bar-container">
+            <div class="perf-bar btree" style="width:${btreeW}%;">${formatUs(btreeUs)}</div>
+          </div>
+          <div class="perf-time">${formatUs(btreeUs)}</div>
+        </div>
+        <div class="perf-row">
+          <div class="perf-label" style="color:var(--purple);">Heap</div>
+          <div class="perf-bar-container">
+            <div class="perf-bar heap" style="width:${heapW}%;">${formatUs(heapUs)}</div>
+          </div>
+          <div class="perf-time">${formatUs(heapUs)}</div>
+        </div>
+      `;
+    }
+
+    // ============================================================
+    //  Benchmark
+    // ============================================================
+    async function doBenchmark() {
+      const btn = $('bench-btn');
+      const btnText = $('bench-btn-text');
+
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="spinner"></span> Running…';
+      $('bench-result').innerHTML = '<div class="alert alert-info"><span class="spinner"></span> Running 100 insert + find + delete operations…</div>';
+
+      const data = await api('/api/benchmark', { method: 'POST' });
+      btn.disabled = false;
+      btnText.textContent = '▶ Run Benchmark';
+
+      if (data.status === 'success') {
+        const ops = ['insert', 'find', 'delete'];
+        const labels = ['INSERT', 'FIND', 'DELETE'];
+        const icons = ['📝', '🔍', '🗑️'];
+
+        let barsHtml = '';
+        ops.forEach((op, i) => {
+          const bt = data[op].btree_avg_us;
+          const hp = data[op].heap_avg_us;
+          const maxVal = Math.max(bt, hp);
+          const btW = maxVal > 0 ? Math.max((bt / maxVal) * 100, 5) : 5;
+          const hpW = maxVal > 0 ? Math.max((hp / maxVal) * 100, 5) : 5;
+          const faster = bt < hp ? 'btree' : 'heap';
+          const speedup = faster === 'btree' ? (hp / bt) : (bt / hp);
+
+          barsHtml += `
+            <div style="margin-bottom:24px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <span style="font-size:12px;font-weight:600;color:var(--text-light);">${icons[i]} ${labels[i]} (avg per op)</span>
+                <span class="speedup-badge" style="${faster === 'heap' ? 'color:var(--purple);border-color:rgba(168,85,247,0.3);background:rgba(168,85,247,0.1);' : ''}">${faster === 'btree' ? '⚡ B+ Tree' : 'Heap'} ${speedup.toFixed(1)}x faster</span>
+              </div>
+              <div class="perf-row">
+                <div class="perf-label" style="color:var(--matrix);">B+ Tree</div>
+                <div class="perf-bar-container">
+                  <div class="perf-bar btree" style="width:${btW}%;">${formatUs(bt)}</div>
+                </div>
+                <div class="perf-time">${formatUs(bt)}</div>
+              </div>
+              <div class="perf-row">
+                <div class="perf-label" style="color:var(--purple);">Heap</div>
+                <div class="perf-bar-container">
+                  <div class="perf-bar heap" style="width:${hpW}%;">${formatUs(hp)}</div>
+                </div>
+                <div class="perf-time">${formatUs(hp)}</div>
+              </div>
+            </div>
+          `;
+        });
+
+        // Summary table
+        let tableHtml = `
+          <div class="divider"></div>
+          <div class="section-title">Detailed Results (${data.operations} operations each)</div>
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>Operation</th>
+                <th>B+ Tree Total</th>
+                <th>Heap Total</th>
+                <th>B+ Tree Avg</th>
+                <th>Heap Avg</th>
+                <th>Winner</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        ops.forEach((op, i) => {
+          const bt = data[op];
+          const winner = bt.btree_avg_us < bt.heap_avg_us ? 'B+ Tree' : 'Heap';
+          tableHtml += `
+            <tr>
+              <td style="color:var(--text-light);font-weight:500;">${labels[i]}</td>
+              <td class="${winner === 'B+ Tree' ? 'bench-winner' : 'bench-loser'}">${formatUs(bt.btree_total_us)}</td>
+              <td class="${winner === 'Heap' ? 'bench-winner' : 'bench-loser'}">${formatUs(bt.heap_total_us)}</td>
+              <td class="${winner === 'B+ Tree' ? 'bench-winner' : 'bench-loser'}">${formatUs(bt.btree_avg_us)}</td>
+              <td class="${winner === 'Heap' ? 'bench-winner' : 'bench-loser'}">${formatUs(bt.heap_avg_us)}</td>
+              <td style="color:${winner === 'B+ Tree' ? 'var(--matrix)' : 'var(--purple)'};font-weight:600;">${winner}</td>
+            </tr>
+          `;
+        });
+        tableHtml += '</tbody></table>';
+
+        $('bench-result').innerHTML = barsHtml + tableHtml;
+        refreshStats();
+      } else {
+        $('bench-result').innerHTML = `<div class="alert alert-error">✗ ${data.message || 'Benchmark failed'}</div>`;
+      }
+    }
+
+    // ============================================================
+    //  Enter key support
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      $('search-id').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doSearch();
+      });
+      $('seed-count').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doSeed();
+      });
+    });
+
+    // ============================================================
+    //  Init
+    // ============================================================
+    checkHealth();
+    refreshStats();
+    setInterval(() => { checkHealth(); refreshStats(); }, 5000);
+  </script>
+</body>
+</html>
